@@ -1,0 +1,171 @@
+name: clove-local
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clove}
+      POSTGRES_USER: ${POSTGRES_USER:-clove}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clove_local}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - clove
+
+  etcd:
+    image: ${ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.25}
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command:
+      - etcd
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - clove
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2024-12-18T13-15-44Z}
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: ["minio", "server", "/minio_data", "--console-address", ":9001"]
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/minio_data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - clove
+
+  milvus:
+    image: ${MILVUS_IMAGE:-milvusdb/milvus:v2.6.21}
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MQ_TYPE: woodpecker
+    ports:
+      - "127.0.0.1:${MILVUS_PORT:-19530}:19530"
+      - "127.0.0.1:${MILVUS_WEB_PORT:-9091}:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 15s
+      start_period: 90s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - clove
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      ENVIRONMENT: ${APP_ENV:-development}
+      DEBUG: ${DEBUG:-false}
+      API_PREFIX: /api
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-clove}:${POSTGRES_PASSWORD:-clove_local}@postgres:5432/${POSTGRES_DB:-clove}
+      DEV_USER_ID: ${DEV_USER_ID:-demo-user}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      MILVUS_ENABLED: ${MILVUS_ENABLED:-true}
+      MILVUS_URI: http://milvus:19530
+      MILVUS_TOKEN: ${MILVUS_TOKEN:-}
+      MILVUS_COLLECTION: ${MILVUS_COLLECTION:-candidate_embeddings}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local_feature_hash}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-feature-hash-v1}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-96}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"
+      interval: 10s
+      start_period: 20s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - clove
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - clove
+
+networks:
+  clove:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  etcd_data:
+  minio_data:
+  milvus_data:

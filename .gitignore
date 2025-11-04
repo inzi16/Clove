@@ -1,0 +1,49 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# JavaScript / TypeScript
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs and local runtime data
+*.log
+logs/
+tmp/
+.cache/
+volumes/
+*.db
+*.sqlite
+*.sqlite3
+
+# Test and build artifacts
+.tox/
+build/
+*.egg-info/
+playwright-report/
+test-results/

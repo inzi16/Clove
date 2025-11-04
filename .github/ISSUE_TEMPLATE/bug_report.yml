@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a reproducible problem in Clove.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a problem.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Include what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the app with ...
+        2. Open ...
+        3. Click ...
+    validations:
+      required: true
+  - type: dropdown
+    id: setup
+    attributes:
+      label: Setup
+      options:
+        - SQLite and local search
+        - Docker Compose
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove candidate data, credentials, tokens, and other sensitive information.
+      render: shell

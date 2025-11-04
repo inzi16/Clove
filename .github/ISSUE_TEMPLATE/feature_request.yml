@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest a focused improvement to the recruiting workflow.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the user and the recruiting task that is difficult today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested approach
+      description: A short workflow or example is more useful than a feature name alone.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Data, fairness, or tenant-isolation concerns
+      description: Note any candidate-data or automated-decision impact you can see.
